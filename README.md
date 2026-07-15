@@ -43,7 +43,7 @@ git push -u origin master
 
 ```bash
 export GITHUB_PAT="ghp_xxxxxxxxxxxxxxxxxxxx"
-export GITHUB_REPO="YOUR_USER/YOUR_REPO"
+export GITHUB_ORG="YOUR_ORG_NAME"
 ./runner/start-runner.sh
 ```
 

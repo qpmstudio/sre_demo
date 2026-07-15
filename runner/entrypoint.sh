@@ -2,9 +2,9 @@
 set -e
 
 : "${GITHUB_PAT:?GITHUB_PAT is required}"
-: "${GITHUB_REPO:?GITHUB_REPO is required (format: owner/repo)}"
+: "${GITHUB_ORG:?GITHUB_ORG is required}"
 
-API_BASE="https://api.github.com/repos/${GITHUB_REPO}/actions/runners"
+API_BASE="https://api.github.com/orgs/${GITHUB_ORG}/actions/runners"
 
 cleanup() {
     echo "[runner] Deregistering runner..."
@@ -33,9 +33,9 @@ if [ -z "$REG_TOKEN" ] || [ "$REG_TOKEN" = "null" ]; then
     exit 1
 fi
 
-echo "[runner] Configuring runner for ${GITHUB_REPO}..."
+echo "[runner] Configuring runner for org: ${GITHUB_ORG}..."
 ./config.sh \
-    --url "https://github.com/${GITHUB_REPO}" \
+    --url "https://github.com/${GITHUB_ORG}" \
     --token "${REG_TOKEN}" \
     --unattended \
     --replace \

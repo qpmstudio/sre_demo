@@ -18,7 +18,7 @@ if [ ! -f "$KUBECONFIG" ]; then
 fi
 
 : "${GITHUB_PAT:?GITHUB_PAT is required}"
-: "${GITHUB_REPO:?GITHUB_REPO is required (format: owner/repo)}"
+: "${GITHUB_ORG:?GITHUB_ORG is required}"
 
 echo "[start-runner] Building runner image..."
 docker build -t "$IMAGE" "$(dirname "$0")"
@@ -29,7 +29,7 @@ docker run -d --rm \
     -v "${SOCK}:${SOCK}" \
     -v "${KUBECONFIG}:/home/runner/.kube/config" \
     -e GITHUB_PAT \
-    -e GITHUB_REPO \
+    -e GITHUB_ORG \
     "$IMAGE"
 
 echo "[start-runner] Runner container started. View logs: docker logs -f local-github-runner"
