@@ -1,9 +1,12 @@
 #!/bin/bash
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 IMAGE="local-action-runner:latest"
 SOCK="/var/run/docker.sock"
 KUBECONFIG="${HOME}/.kube/config"
+RUNNER_VERSION="2.323.0"
+RUNNER_ARCHIVE="${SCRIPT_DIR}/actions-runner.tar.gz"
 
 echo "[start-runner] Checking prerequisites..."
 
@@ -17,19 +20,76 @@ if [ ! -f "$KUBECONFIG" ]; then
     exit 1
 fi
 
+# Detect docker.sock group GID for DooD access
+DOCKER_GID=$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo "")
+if [ -n "$DOCKER_GID" ]; then
+    echo "[start-runner] Docker socket GID: ${DOCKER_GID}"
+fi
+
 : "${GITHUB_PAT:?GITHUB_PAT is required}"
-: "${GITHUB_ORG:?GITHUB_ORG is required}"
+: "${GITHUB_REPO:?GITHUB_REPO is required (format: owner/repo)}"
 
-echo "[start-runner] Building runner image..."
-docker build -t "$IMAGE" "$(dirname "$0")"
+# Download runner binary if not already cached
+if [ ! -f "$RUNNER_ARCHIVE" ]; then
+    RUNNER_URL="https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz"
+    MIRRORS=(
+        "$RUNNER_URL"
+        "https://mirror.ghproxy.com/$RUNNER_URL"
+        "https://ghproxy.com/$RUNNER_URL"
+    )
 
-echo "[start-runner] Starting runner container..."
-docker run -d --rm \
-    --name local-github-runner \
-    -v "${SOCK}:${SOCK}" \
-    -v "${KUBECONFIG}:/home/runner/.kube/config" \
-    -e GITHUB_PAT \
-    -e GITHUB_ORG \
-    "$IMAGE"
+    for url in "${MIRRORS[@]}"; do
+        echo "[start-runner] Trying: $url"
+        rm -f "$RUNNER_ARCHIVE"
+        if curl -fsSL --connect-timeout 30 --max-time 600 -o "$RUNNER_ARCHIVE" "$url"; then
+            SIZE=$(stat -c%s "$RUNNER_ARCHIVE" 2>/dev/null || echo 0)
+            if [ "$SIZE" -gt 50000000 ]; then
+                echo "[start-runner] Download OK (${SIZE} bytes)"
+                break
+            else
+                echo "[start-runner] File too small (${SIZE} bytes), retrying..."
+                rm -f "$RUNNER_ARCHIVE"
+            fi
+        else
+            echo "[start-runner] Download failed from this source."
+        fi
+    done
 
-echo "[start-runner] Runner container started. View logs: docker logs -f local-github-runner"
+    if [ ! -f "$RUNNER_ARCHIVE" ]; then
+        echo "[start-runner] ERROR: All download sources failed."
+        echo "[start-runner] Please download manually:"
+        echo "  curl -L -o $RUNNER_ARCHIVE \"$RUNNER_URL\""
+        exit 1
+    fi
+
+    echo "[start-runner] Runner binary cached at ${RUNNER_ARCHIVE}"
+else
+    echo "[start-runner] Using cached runner binary."
+fi
+
+# echo "[start-runner] Building runner image..."
+# docker build -t "$IMAGE" "$SCRIPT_DIR"
+
+echo "[start-runner] Starting runner container (foreground for debugging)..."
+# Clean up any previous runner container
+if docker ps -a --format '{{.Names}}' | grep -q '^local-github-runner$'; then
+    echo "[start-runner] Removing previous runner container..."
+    docker stop local-github-runner 2>/dev/null || true
+    docker rm local-github-runner 2>/dev/null || true
+fi
+
+if [ "${1:-}" = "--shell" ]; then
+    echo "[start-runner] Starting interactive shell in runner container..."
+    docker run --rm -it         --name local-github-runner         -v "${SOCK}:${SOCK}"         -v "${KUBECONFIG}:/tmp/kubeconfig"         -e GITHUB_PAT         -e GITHUB_REPO         -e KUBECONFIG="/tmp/kubeconfig"         --entrypoint bash         "$IMAGE"
+else
+    echo "[start-runner] Press Ctrl+C to stop, or run with -d flag for background."
+    docker run --rm \
+        --name local-github-runner \
+        -v "${SOCK}:${SOCK}" \
+        -v "${KUBECONFIG}:/tmp/kubeconfig" \
+        -e GITHUB_PAT \
+        -e GITHUB_REPO \
+        -e KUBECONFIG="/tmp/kubeconfig" \
+        --group-add "${DOCKER_GID}" \
+        "$IMAGE"
+fi

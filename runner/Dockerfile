@@ -2,7 +2,7 @@ FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install base packages
+# Install base packages + Docker CLI (from Ubuntu repo, avoids download.docker.com)
 RUN apt-get update && apt-get install -y \
     curl \
     jq \
@@ -10,35 +10,31 @@ RUN apt-get update && apt-get install -y \
     apt-transport-https \
     ca-certificates \
     gnupg \
-    lsb-release \
+    docker.io \
+    sudo \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Docker CLI
-RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null \
-    && apt-get update && apt-get install -y docker-ce-cli \
+# Install kubectl via Aliyun Kubernetes mirror (avoids dl.k8s.io)
+RUN curl -fsSL https://mirrors.aliyun.com/kubernetes/apt/doc/apt-key.gpg | gpg --dearmor -o /etc/apt/keyrings/kubernetes-archive-keyring.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/kubernetes-archive-keyring.gpg] https://mirrors.aliyun.com/kubernetes/apt/ kubernetes-xenial main" | tee /etc/apt/sources.list.d/kubernetes.list \
+    && apt-get update && apt-get install -y kubectl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install kubectl
-RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
-    && install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl \
-    && rm kubectl
+# Create runner user; add to docker + nogroup for DooD socket access
+RUN useradd -m -s /bin/bash runner \
+    && usermod -a -G docker,nogroup runner
 
-# Create runner user
-RUN useradd -m -s /bin/bash runner
-
-# Install GitHub Actions runner
-ENV RUNNER_VERSION=2.323.0
+# GitHub Actions runner (pre-downloaded binary, avoids github.com in China)
+ARG RUNNER_ARCHIVE=actions-runner.tar.gz
+COPY ${RUNNER_ARCHIVE} /tmp/runner.tar.gz
 RUN cd /home/runner \
-    && curl -o actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz -L https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz \
-    && tar xzf actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz \
-    && rm actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz \
+    && tar xzf /tmp/runner.tar.gz \
+    && rm /tmp/runner.tar.gz \
     && ./bin/installdependencies.sh \
     && chown -R runner:runner /home/runner
 
 COPY entrypoint.sh /home/runner/entrypoint.sh
-RUN chmod +x /home/runner/entrypoint.sh
+RUN chmod 755 /home/runner/entrypoint.sh
 
-USER runner
 WORKDIR /home/runner
 ENTRYPOINT ["/home/runner/entrypoint.sh"]
