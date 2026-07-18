@@ -24,7 +24,7 @@
 
 ## 前置条件
 
-- Docker Desktop（已启用 Kubernetes）
+- Docker Desktop（已启用 Kubernetes，开启 "Expose daemon on tcp://localhost:2375 without TLS"）
 - Go 1.22+（仅本地开发验证需要）
 - 一个 GitHub 仓库，且你的账号对其有 admin 权限
 - GitHub Personal Access Token（需要 `repo` 权限）
@@ -43,11 +43,11 @@ git push -u origin master
 
 ```bash
 export GITHUB_PAT="ghp_xxxxxxxxxxxxxxxxxxxx"
-export GITHUB_REPO="YOUR_USER/YOUR_REPO"
-./runner/start-runner.sh
+export DOCKER_HOST="tcp://host.docker.internal:2375"
+./runner/start-runner.sh YOUR_USER/YOUR_REPO
 ```
 
-Runner 启动后，在 GitHub 仓库 Settings → Actions → Runners 中可以看到 `local-runner-*` 上线。
+Runner 启动后，在 GitHub 仓库 Settings → Actions → Runners 中可以看到 `local-*` 上线。
 
 ### 3. 触发部署
 
@@ -73,7 +73,7 @@ curl localhost:8080/health
 
 ```bash
 # 停止 runner
-docker stop local-github-runner
+docker stop gh-runner-YOUR_USER-YOUR_REPO
 
 # 清理 K8s 资源
 kubectl delete namespace demo-dev
@@ -82,7 +82,15 @@ kubectl delete namespace demo-dev
 ## 架构
 
 ```
-Git push → GitHub Actions → Self-hosted Runner (DooD)
-                                ├── docker.sock → 宿主机 Docker
-                                └── kubeconfig  → Docker Desktop K8s
+Git push → GitHub Actions → Self-hosted Runner
+                                ├── DOCKER_HOST=tcp://host.docker.internal:2375 → Docker Desktop
+                                └── kubeconfig (base64 via env) → Docker Desktop K8s
 ```
+
+## 环境变量
+
+| 变量 | 必需 | 说明 |
+|---|---|---|
+| `GITHUB_PAT` | 是 | GitHub Personal Access Token（`repo` 权限） |
+| `DOCKER_HOST` | 是 | Docker daemon 地址，如 `tcp://host.docker.internal:2375` |
+| `KUBECONFIG` | 否 | 默认 `~/.kube/config`，自动 base64 编码传入容器 |

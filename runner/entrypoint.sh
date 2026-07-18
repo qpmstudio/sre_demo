@@ -138,30 +138,32 @@ ts "api.github.com → $(echo "$HTTP_TEST" | tail -1)"
 
 log_section "Docker Daemon Connectivity"
 
-if [ -S /var/run/docker.sock ]; then
-    ts "docker.sock: EXISTS at /var/run/docker.sock"
+if docker info >/dev/null 2>&1; then
+    ts "docker info: REACHABLE via ${DOCKER_HOST:-unix:///var/run/docker.sock}"
     DOCKER_INFO=$(timeout 5 docker info --format '{{.ServerVersion}} | Containers:{{.Containers}} Running:{{.ContainersRunning}} | Images:{{.Images}} | OS:{{.OperatingSystem}}' 2>&1)
-    ts "docker info: ${DOCKER_INFO}"
+    ts "             ${DOCKER_INFO}"
 else
-    ts "WARNING: /var/run/docker.sock not found — container builds will fail"
+    ts "ERROR: Cannot connect to Docker daemon"
+    exit 1
 fi
 
-# ── Kubeconfig check ────────────────────────────────────────────────────────
+# ── Kubeconfig decode (passed as base64 to avoid WSL2 mount issues) ─────────
 
 log_section "Kubernetes Connectivity"
 
 : "${KUBECONFIG:?KUBECONFIG is required}"
-ts "KUBECONFIG  : ${KUBECONFIG}"
-if [ -f "$KUBECONFIG" ]; then
-    ts "kubeconfig  : EXISTS ($(wc -c < "$KUBECONFIG") bytes)"
-    K8S_INFO=$(timeout 5 kubectl cluster-info 2>&1 | head -2)
-    ts "cluster-info: $(echo "$K8S_INFO" | tr '\n' ' ')"
-    K8S_NODES=$(timeout 5 kubectl get nodes --no-headers 2>&1 | wc -l)
-    ts "nodes       : ${K8S_NODES}"
-else
-    ts "ERROR: kubeconfig file not found at ${KUBECONFIG}"
-    exit 1
-fi
+: "${KUBECONFIG_B64:?KUBECONFIG_B64 is required}"
+
+KUBECONFIG_DIR=$(dirname "${KUBECONFIG}")
+mkdir -p "${KUBECONFIG_DIR}"
+echo "${KUBECONFIG_B64}" | base64 -d > "${KUBECONFIG}"
+chmod 600 "${KUBECONFIG}"
+ts "kubeconfig  : decoded from KUBECONFIG_B64 → ${KUBECONFIG} ($(wc -c < "${KUBECONFIG}") bytes)"
+
+K8S_INFO=$(timeout 5 kubectl cluster-info 2>&1 | head -2)
+ts "cluster-info: $(echo "$K8S_INFO" | tr '\n' ' ')"
+K8S_NODES=$(timeout 5 kubectl get nodes --no-headers 2>&1 | wc -l)
+ts "nodes       : ${K8S_NODES}"
 
 # ── PAT validation ──────────────────────────────────────────────────────────
 
@@ -273,12 +275,5 @@ echo ""
 
 # Fix ownership so runner user can read config files
 chown -R runner:runner /home/runner 2>/dev/null || true
-
-# Ensure runner user can access docker.sock (host's GID differs from container's docker group)
-SOCK_GID=$(stat -c '%g' /var/run/docker.sock 2>/dev/null || true)
-if [ -n "$SOCK_GID" ] && ! id -G runner 2>/dev/null | tr ' ' '\n' | grep -qx "$SOCK_GID"; then
-    groupadd -g "$SOCK_GID" docker_sock 2>/dev/null || true
-    usermod -a -G "$(getent group "$SOCK_GID" | cut -d: -f1)" runner 2>/dev/null || true
-fi
 
 exec runuser -u runner -- ./run.sh

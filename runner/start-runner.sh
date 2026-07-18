@@ -3,15 +3,19 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 IMAGE="local-action-runner:latest"
-SOCK="/var/run/docker.sock"
 KUBECONFIG="${HOME}/.kube/config"
 RUNNER_VERSION="2.323.0"
 RUNNER_ARCHIVE="${SCRIPT_DIR}/actions-runner.tar.gz"
 
+GITHUB_REPO="${1:?Usage: $0 <owner/repo> [--shell]}"
+CONTAINER_NAME="gh-runner-${GITHUB_REPO//\//-}"
+
 echo "[start-runner] Checking prerequisites..."
 
-if [ ! -S "$SOCK" ]; then
-    echo "[start-runner] ERROR: $SOCK not found. Is Docker running?"
+: "${DOCKER_HOST:?DOCKER_HOST is required (e.g. tcp://host.docker.internal:2375)}"
+
+if ! docker info >/dev/null 2>&1; then
+    echo "[start-runner] ERROR: Cannot connect to Docker at ${DOCKER_HOST}"
     exit 1
 fi
 
@@ -20,14 +24,7 @@ if [ ! -f "$KUBECONFIG" ]; then
     exit 1
 fi
 
-# Detect docker.sock group GID for DooD access
-DOCKER_GID=$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo "")
-if [ -n "$DOCKER_GID" ]; then
-    echo "[start-runner] Docker socket GID: ${DOCKER_GID}"
-fi
-
 : "${GITHUB_PAT:?GITHUB_PAT is required}"
-: "${GITHUB_REPO:?GITHUB_REPO is required (format: owner/repo)}"
 
 # Download runner binary if not already cached
 if [ ! -f "$RUNNER_ARCHIVE" ]; then
@@ -72,24 +69,34 @@ fi
 
 echo "[start-runner] Starting runner container (foreground for debugging)..."
 # Clean up any previous runner container
-if docker ps -a --format '{{.Names}}' | grep -q '^local-github-runner$'; then
+if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     echo "[start-runner] Removing previous runner container..."
-    docker stop local-github-runner 2>/dev/null || true
-    docker rm local-github-runner 2>/dev/null || true
+    docker stop "${CONTAINER_NAME}" 2>/dev/null || true
+    docker rm "${CONTAINER_NAME}" 2>/dev/null || true
 fi
 
-if [ "${1:-}" = "--shell" ]; then
+# Read and encode kubeconfig to pass via env (avoids WSL2 file-sharing mount issues)
+KUBECONFIG_B64=$(base64 -w 0 "${KUBECONFIG}")
+
+if [ "${2:-}" = "--shell" ]; then
     echo "[start-runner] Starting interactive shell in runner container..."
-    docker run --rm -it         --name local-github-runner         -v "${SOCK}:${SOCK}"         -v "${KUBECONFIG}:/tmp/kubeconfig"         -e GITHUB_PAT         -e GITHUB_REPO         -e KUBECONFIG="/tmp/kubeconfig"         --entrypoint bash         "$IMAGE"
+    docker run --rm -it \
+        --name "${CONTAINER_NAME}" \
+        -e DOCKER_HOST="tcp://host.docker.internal:2375" \
+        -e GITHUB_PAT \
+        -e GITHUB_REPO="${GITHUB_REPO}" \
+        -e KUBECONFIG="/tmp/kubeconfig" \
+        -e KUBECONFIG_B64="${KUBECONFIG_B64}" \
+        --entrypoint bash \
+        "$IMAGE"
 else
     echo "[start-runner] Press Ctrl+C to stop, or run with -d flag for background."
     docker run --rm \
-        --name local-github-runner \
-        -v "${SOCK}:${SOCK}" \
-        -v "${KUBECONFIG}:/tmp/kubeconfig" \
+        --name "${CONTAINER_NAME}" \
+        -e DOCKER_HOST="tcp://host.docker.internal:2375" \
         -e GITHUB_PAT \
-        -e GITHUB_REPO \
+        -e GITHUB_REPO="${GITHUB_REPO}" \
         -e KUBECONFIG="/tmp/kubeconfig" \
-        --group-add "${DOCKER_GID}" \
+        -e KUBECONFIG_B64="${KUBECONFIG_B64}" \
         "$IMAGE"
 fi
