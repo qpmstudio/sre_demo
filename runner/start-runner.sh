@@ -90,8 +90,8 @@ if [ "${2:-}" = "--shell" ]; then
         --entrypoint bash \
         "$IMAGE"
 else
-    echo "[start-runner] Press Ctrl+C to stop, or run with -d flag for background."
-    docker run --rm \
+    echo "[start-runner] Starting runner container in background..."
+    docker run -d --rm \
         --name "${CONTAINER_NAME}" \
         -e DOCKER_HOST="tcp://host.docker.internal:2375" \
         -e GITHUB_PAT \
