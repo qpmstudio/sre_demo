@@ -2,6 +2,9 @@ name: Local K8s Deploy
 on:
   push:
     branches: [dev]
+defaults:
+  run:
+    shell: bash
 jobs:
   build-and-deploy:
     runs-on: self-hosted
