@@ -7,7 +7,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # kubectl v1.36.3 via pkgs.k8s.io (same source as the cluster)
-RUN curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.36/deb/Release.key \
+RUN mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.36/deb/Release.key \
       | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg \
     && echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.36/deb/ /" \
       > /etc/apt/sources.list.d/kubernetes.list \
