@@ -15,10 +15,14 @@ RUN mkdir -p /etc/apt/keyrings \
     && apt-get update && apt-get install -y kubectl=1.36.3-* \
     && rm -rf /var/lib/apt/lists/*
 
-# GitHub Actions runner v2.323.0 (downloaded at build time; github.com reachable)
+# GitHub Actions runner v2.336.0 (downloaded at build time; github.com reachable)
+# v2.336.0 is the current latest release; older 2.323.0 is deprecated server-side
+# and cannot receive jobs ("Runner version ... is deprecated"). Keep this pinned
+# to a current release because --disableupdate (see entrypoint.sh) prevents the
+# self-update from fixing it in place.
 # --tls-max 1.2: local DNS proxy rejects TLS 1.3 to github.com (error:0A000126)
 RUN curl -fsSL --tls-max 1.2 -o /tmp/actions-runner.tar.gz \
-      https://github.com/actions/runner/releases/download/v2.323.0/actions-runner-linux-x64-2.323.0.tar.gz \
+      https://github.com/actions/runner/releases/download/v2.336.0/actions-runner-linux-x64-2.336.0.tar.gz \
     && mkdir -p /home/runner \
     && tar xzf /tmp/actions-runner.tar.gz -C /home/runner \
     && /home/runner/bin/installdependencies.sh \
