@@ -15,6 +15,7 @@ spec:
       containers:
         - name: runner
           image: 192.168.3.49:30500/actions-runner:latest
+          imagePullPolicy: Always
           env:
             - name: GITHUB_PAT
               valueFrom:
