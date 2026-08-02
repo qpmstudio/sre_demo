@@ -14,12 +14,21 @@ jobs:
       - name: Ensure namespace
         run: kubectl create namespace demo-dev --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Build & push image (kaniko)
+      - name: Build & push image (kaniko Job)
         run: |
           TAG="dev-${GITHUB_SHA::7}"
-          /usr/local/bin/kaniko-executor --context=./demo \
-            --destination=192.168.3.49:30500/demo-app:${TAG} \
-            --cache=true --insecure
+          # Build context from the checked-out demo/ via ConfigMap
+          kubectl create configmap demo-context -n ci \
+            --from-file=Dockerfile=demo/Dockerfile \
+            --from-file=main.go=demo/main.go \
+            --from-file=go.mod=demo/go.mod \
+            --dry-run=client -o yaml | kubectl apply -f -
+          # Run the build in an isolated kaniko Job so the runner pod stays light
+          kubectl delete job build-demo -n ci --ignore-not-found
+          sed "s|192.168.3.49:30500/demo-app:\${TAG}|192.168.3.49:30500/demo-app:${TAG}|" ci/kaniko-build-job.yaml | kubectl apply -f -
+          kubectl wait --for=condition=complete job/build-demo -n ci --timeout=300s \
+            || { echo "kaniko job failed:"; kubectl logs job/build-demo -n ci --tail=30; kubectl delete job build-demo -n ci --ignore-not-found; exit 1; }
+          kubectl delete job build-demo -n ci --ignore-not-found
 
       - name: Deploy to K8s
         run: |

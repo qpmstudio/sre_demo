@@ -1,0 +1,34 @@
+# kaniko build Job for the demo app. The workflow sed-replaces ${TAG} in the
+# --destination and applies this manifest. Build context comes from the
+# `demo-context` ConfigMap (created by the workflow from the checked-out demo/).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: build-demo
+  namespace: ci
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: kaniko
+          image: gcr.io/kaniko-project/executor:v1.24.0
+          args:
+            - --context=/workspace
+            - --destination=192.168.3.49:30500/demo-app:${TAG}
+            - --insecure
+          env:
+            - name: HTTP_PROXY
+              value: http://192.168.3.155:7890
+            - name: HTTPS_PROXY
+              value: http://192.168.3.155:7890
+            - name: NO_PROXY
+              value: 192.168.3.49,localhost,127.0.0.1,.svc,.cluster.local
+          volumeMounts:
+            - name: ctx
+              mountPath: /workspace
+      volumes:
+        - name: ctx
+          configMap:
+            name: demo-context
