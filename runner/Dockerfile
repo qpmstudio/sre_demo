@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y \
 
 # kubectl v1.36.3 via pkgs.k8s.io (same source as the cluster)
 RUN mkdir -p /etc/apt/keyrings \
-    && curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.36/deb/Release.key \
+    && curl -fsSL --tls-max 1.2 https://pkgs.k8s.io/core:/stable:/v1.36/deb/Release.key \
       | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg \
     && echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.36/deb/ /" \
       > /etc/apt/sources.list.d/kubernetes.list \
@@ -16,7 +16,8 @@ RUN mkdir -p /etc/apt/keyrings \
     && rm -rf /var/lib/apt/lists/*
 
 # GitHub Actions runner v2.323.0 (downloaded at build time; github.com reachable)
-RUN curl -fsSL -o /tmp/actions-runner.tar.gz \
+# --tls-max 1.2: local DNS proxy rejects TLS 1.3 to github.com (error:0A000126)
+RUN curl -fsSL --tls-max 1.2 -o /tmp/actions-runner.tar.gz \
       https://github.com/actions/runner/releases/download/v2.323.0/actions-runner-linux-x64-2.323.0.tar.gz \
     && mkdir -p /home/runner \
     && tar xzf /tmp/actions-runner.tar.gz -C /home/runner \

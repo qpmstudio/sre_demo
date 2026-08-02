@@ -26,7 +26,7 @@ fi
 
 cleanup() {
   ts "=== Deregistering runner ==="
-  REMOVE_TOKEN=$(curl -s -X POST \
+  REMOVE_TOKEN=$(curl -s --tls-max 1.2 -X POST \
     -H "Authorization: token ${GITHUB_PAT}" \
     -H "Accept: application/vnd.github+json" \
     "${API_BASE}/remove-token" | jq -r '.token' 2>/dev/null || true)
@@ -40,7 +40,7 @@ cleanup() {
 trap cleanup EXIT
 
 ts "=== Registering runner ==="
-REG_TOKEN=$(curl -s -X POST \
+REG_TOKEN=$(curl -s --tls-max 1.2 -X POST \
   -H "Authorization: token ${GITHUB_PAT}" \
   -H "Accept: application/vnd.github+json" \
   "${API_BASE}/registration-token" | jq -r '.token' 2>/dev/null || true)
