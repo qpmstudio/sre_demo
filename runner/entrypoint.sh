@@ -16,7 +16,7 @@ SA_DIR=/var/run/secrets/kubernetes.io/serviceaccount
 if [ -d "$SA_DIR" ] && [ -f "$SA_DIR/token" ]; then
   kubectl config set-cluster ci --server=https://kubernetes.default.svc \
     --certificate-authority="$SA_DIR/ca.crt" >/dev/null
-  kubectl config set-credentials ci --token-file="$SA_DIR/token" >/dev/null
+  kubectl config set-credentials ci --token="$(cat "$SA_DIR/token")" >/dev/null
   kubectl config set-context ci --cluster=ci --user=ci >/dev/null
   kubectl config use-context ci >/dev/null
   ts "kubeconfig ready; nodes: $(kubectl get nodes --no-headers 2>/dev/null | wc -l)"
