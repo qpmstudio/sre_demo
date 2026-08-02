@@ -7,6 +7,10 @@ ts() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 : "${GITHUB_PAT:?GITHUB_PAT is required}"
 : "${GITHUB_REPO:?GITHUB_REPO is required (owner/repo)}"
 
+# The actions-runner binary refuses to run as root by default. The container
+# runs as root so kaniko can build images, so opt in explicitly.
+export RUNNER_ALLOW_RUNASROOT=1
+
 API_BASE="https://api.github.com/repos/${GITHUB_REPO}/actions/runners"
 RUNNER_NAME="local-$(hostname)-$$"
 
