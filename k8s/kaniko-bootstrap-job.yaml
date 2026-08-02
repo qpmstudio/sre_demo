@@ -8,11 +8,29 @@ spec:
   template:
     spec:
       restartPolicy: Never
+      initContainers:
+        - name: prepare-context
+          # K8s mounts ConfigMap files as symlinks via the ..data dir; kaniko's
+          # COPY preserves those symlinks, producing dangling symlinks in the
+          # output image (e.g. /home/runner/entrypoint.sh). Dereference the
+          # context into real files in a shared emptyDir first.
+          image: busybox:1.36
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /ctx
+              cat /workspace/Dockerfile > /ctx/Dockerfile
+              cat /workspace/entrypoint.sh > /ctx/entrypoint.sh
+          volumeMounts:
+            - name: context
+              mountPath: /workspace
+            - name: ctx
+              mountPath: /ctx
       containers:
         - name: kaniko
           image: gcr.io/kaniko-project/executor:v1.24.0
           args:
-            - --context=/workspace
+            - --context=/ctx
             - --destination=192.168.3.49:30500/actions-runner:latest
             - --insecure
           env:
@@ -23,9 +41,11 @@ spec:
             - name: NO_PROXY
               value: 192.168.3.49,localhost,127.0.0.1,.svc,.cluster.local
           volumeMounts:
-            - name: context
-              mountPath: /workspace
+            - name: ctx
+              mountPath: /ctx
       volumes:
         - name: context
           configMap:
             name: runner-build-context
+        - name: ctx
+          emptyDir: {}
