@@ -80,7 +80,7 @@ demo-app pod 在集群运行
 ### 5.1 runner 镜像自举构建（无 Docker 环境）
 由于集群无 Docker, runner 镜像用**一次性 kaniko Job** 在集群上构建:
 - 以 `runner/` 目录 (Dockerfile + entrypoint.sh) 为构建 context
-- kaniko Job 从 git 仓库或 ConfigMap 取 context, 输出到 `192.168.3.49:30500/actions-runner:latest`
+- kaniko Job 通过 **ConfigMap 挂载** `runner/` 目录文件作为 context (由部署脚本将本地文件写入 ConfigMap), 输出到 `192.168.3.49:30500/actions-runner:latest`
 - 构建成功后删除 Job, 再部署 runner Deployment
 
 ### 5.2 镜像 tag 策略
@@ -92,9 +92,16 @@ demo-app pod 在集群运行
 
 ### 5.4 entrypoint 简化
 复用 sre_demo `runner/entrypoint.sh` 的注册/注销流程 (GitHub API registration/remove token), 但**移除**:
-- `_curl` 的 Docker Desktop DNS 代理 TLS 重试 (三层 fallback) → 简化为普通 curl (或走集群网络)
-- `DOCKER_HOST` / `host.docker.internal` 检查
-- kubeconfig base64 解码逻辑 → 改为集群内 in-cluster 配置 (SA token)
+- `_curl` 的 Docker Desktop DNS 代理 TLS 重试 (三层 fallback) → 简化为普通 curl
+- `DOCKER_HOST` / `host.docker.internal` 检查 → 删除
+- kubeconfig base64 解码逻辑 → 改为从 SA token 生成 in-cluster kubeconfig:
+  ```bash
+  kubectl config set-cluster ci --server=https://kubernetes.default.svc \
+    --certificate-authority=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+  kubectl config set-credentials ci --token-file=/var/run/secrets/kubernetes.io/serviceaccount/token
+  kubectl config set-context ci --cluster=ci --user=ci
+  kubectl config use-context ci
+  ```
 
 ## 6. 验证与风险
 
@@ -116,8 +123,8 @@ demo-app pod 在集群运行
 sre_demo/
 ├── runner/
 │   ├── Dockerfile          # 改造: 去 docker, 加 kaniko/kubectl
-│   ├── entrypoint.sh       # 简化: 去 DooD/Docker Desktop 逻辑, in-cluster kubeconfig
-│   └── start-runner.sh     # (可选) 移除或改造为 kubectl 部署脚本
+│   ├── entrypoint.sh       # 简化: 去 DooD/Docker Desktop 逻辑, 从 SA token 生成 in-cluster kubeconfig
+│   └── start-runner.sh     # 移除 (Docker 专用, 由 k8s/ 清单替代)
 ├── demo/
 │   └── k8s/deployment.yaml # image → registry 唯一 tag
 ├── .github/workflows/deploy.yml  # kaniko 构建 + push + apply
