@@ -94,3 +94,20 @@ Git push → GitHub Actions → Self-hosted Runner
 | `GITHUB_PAT` | 是 | GitHub Personal Access Token（`repo` 权限） |
 | `DOCKER_HOST` | 是 | Docker daemon 地址，如 `tcp://host.docker.internal:2375` |
 | `KUBECONFIG` | 否 | 默认 `~/.kube/config`，自动 base64 编码传入容器 |
+
+## qpmstudio 集群部署（K8s pod 模式）
+
+本仓库也已适配到 qpmstudio kubeadm 集群：runner 以 K8s pod 运行（`ci` 命名空间），
+用 kaniko（隔离 Job）构建镜像推本地 registry，workflow 在 push `dev` 时自动构建+部署。
+
+### 关键文件
+- `k8s/` — ci 命名空间、SA/RBAC（`ci-runner`）、runner Deployment、kaniko bootstrap
+- `ci/kaniko-build-job.yaml` — workflow 使用的 kaniko 构建 Job（隔离在 runner pod 之外）
+- `runner/Dockerfile` / `entrypoint.sh` — runner 镜像（kubectl + kaniko + actions-runner）
+
+### 已知运维事项
+- runner 以 root 运行（供 kaniko），SA `ci-runner` 绑 scoped ClusterRole
+- `--disableupdate` 已禁用 runner 自动更新（曾导致 job 中断）
+- 镜像用 `dev-<sha>` 唯一 tag；containerd 信任 `192.168.3.49:30500`（HTTP）
+- 若出现 ghost runner（旧 pod 残留的 offline/busy runner），到 GitHub 仓库
+  Settings → Actions → Runners 手动删除，或等其随 job 超时自动清除
