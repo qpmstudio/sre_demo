@@ -1,34 +1,35 @@
 name: Local K8s Deploy
-
 on:
   push:
-    branches:
-      - dev
-
+    branches: [dev]
 jobs:
   build-and-deploy:
     runs-on: self-hosted
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Build Docker Image
-        run: docker build -t demo-app:dev-latest ./demo
+      - name: Ensure namespace
+        run: kubectl create namespace demo-dev --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Ensure Namespace
+      - name: Build & push image (kaniko)
         run: |
-          kubectl create namespace demo-dev --dry-run=client -o yaml | kubectl apply -f -
+          TAG="dev-${GITHUB_SHA::7}"
+          /usr/local/bin/kaniko-executor --context=./demo \
+            --destination=192.168.3.49:30500/demo-app:${TAG} \
+            --cache=true --insecure
 
       - name: Deploy to K8s
-        run: kubectl apply -f demo/k8s/deployment.yaml -n demo-dev
-
-      - name: Wait for Rollout
-        run: kubectl rollout status deployment/demo-app -n demo-dev --timeout=60s
-
-      - name: Health Check
         run: |
-          kubectl port-forward -n demo-dev svc/demo-app 8080:8080 &
-          PF_PID=$!
-          sleep 2
+          TAG="dev-${GITHUB_SHA::7}"
+          sed -i "s|image: 192.168.3.49:30500/demo-app:.*|image: 192.168.3.49:30500/demo-app:${TAG}|" demo/k8s/deployment.yaml
+          kubectl apply -f demo/k8s/deployment.yaml -n demo-dev
+
+      - name: Wait for rollout
+        run: kubectl rollout status deployment/demo-app -n demo-dev --timeout=90s
+
+      - name: Health check
+        run: |
+          kubectl port-forward -n demo-dev svc/demo-app 8080:8080 & PF=$!
+          sleep 3
           curl -s --retry 5 --retry-connrefused http://localhost:8080/health
-          kill $PF_PID 2>/dev/null || true
+          kill $PF 2>/dev/null || true
