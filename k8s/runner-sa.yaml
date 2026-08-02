@@ -10,11 +10,14 @@ metadata:
   name: ci-runner
 rules:
   - apiGroups: [""]
-    resources: ["namespaces", "pods", "services", "configmaps", "secrets"]
+    resources: ["namespaces", "pods", "services", "configmaps"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: [""]
     resources: ["pods/portforward"]
     verbs: ["create", "get"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get", "list"]
   - apiGroups: ["apps"]
     resources: ["deployments"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

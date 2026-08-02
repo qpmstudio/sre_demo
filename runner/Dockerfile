@@ -28,7 +28,8 @@ RUN curl -fsSL --tls-max 1.2 -o /tmp/actions-runner.tar.gz \
     && /home/runner/bin/installdependencies.sh \
     && rm /tmp/actions-runner.tar.gz
 
-# kaniko executor (no-Docker image build inside runner pods)
+# kaniko executor — kept for compatibility/tooling; image builds now run in
+# an isolated kaniko Job (ci/kaniko-build-job.yaml).
 # Installed at /usr/local/bin/kaniko-executor, NOT /kaniko/executor: kaniko
 # re-executes its own binary at /kaniko/executor inside the chrooted build
 # rootfs, so writing that path in the output image triggers ETXTBSY

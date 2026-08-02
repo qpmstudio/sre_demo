@@ -42,6 +42,6 @@ jobs:
       - name: Health check
         run: |
           kubectl port-forward -n demo-dev svc/demo-app 8080:8080 & PF=$!
+          trap 'kill $PF 2>/dev/null || true' EXIT
           sleep 3
-          curl -s --retry 5 --retry-connrefused http://localhost:8080/health
-          kill $PF 2>/dev/null || true
+          curl -s --fail --retry 5 --retry-connrefused http://localhost:8080/health

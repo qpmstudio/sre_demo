@@ -1,5 +1,8 @@
 # SRE — 本地 K8s 自举 CI/CD
 
+> **注意**：本文档的 Docker Desktop 部分已被 qpmstudio K8s pod 模式取代（见下文
+> "qpmstudio 集群部署" 一节）；runner 以 K8s pod 运行，不再使用 start-runner.sh/DOCKER_HOST。
+
 在 Docker Desktop 上使用 GitHub Actions self-hosted runner，实现 push → build → deploy → verify 的本地开发闭环。
 
 ## 项目结构
@@ -7,9 +10,8 @@
 ```
 .
 ├── runner/
-│   ├── Dockerfile          # Runner 镜像：ubuntu + docker-cli + kubectl + actions runner
-│   ├── entrypoint.sh       # 容器入口：自动注册/注销 runner
-│   └── start-runner.sh     # 宿主机启动脚本
+│   ├── Dockerfile          # Runner 镜像：ubuntu + kubectl + kaniko + actions runner
+│   └── entrypoint.sh       # 容器入口：自动注册 runner
 ├── demo/
 │   ├── main.go             # Go HTTP 服务，/health 返回启动时间
 │   ├── Dockerfile          # 多阶段构建
@@ -92,8 +94,8 @@ Git push → GitHub Actions → Self-hosted Runner
 | 变量 | 必需 | 说明 |
 |---|---|---|
 | `GITHUB_PAT` | 是 | GitHub Personal Access Token（`repo` 权限） |
-| `DOCKER_HOST` | 是 | Docker daemon 地址，如 `tcp://host.docker.internal:2375` |
-| `KUBECONFIG` | 否 | 默认 `~/.kube/config`，自动 base64 编码传入容器 |
+| `DOCKER_HOST` | 否（仅 legacy Docker Desktop 模式） | Docker daemon 地址，如 `tcp://host.docker.internal:2375`；K8s pod 模式不使用 |
+| `KUBECONFIG` | 否（仅 legacy Docker Desktop 模式） | 默认 `~/.kube/config`，自动 base64 编码传入容器；K8s pod 模式使用 in-cluster SA token |
 
 ## qpmstudio 集群部署（K8s pod 模式）
 
@@ -106,7 +108,7 @@ Git push → GitHub Actions → Self-hosted Runner
 - `runner/Dockerfile` / `entrypoint.sh` — runner 镜像（kubectl + kaniko + actions-runner）
 
 ### 已知运维事项
-- runner 以 root 运行（供 kaniko），SA `ci-runner` 绑 scoped ClusterRole
+- runner 以 root 运行（容器内 root）；镜像构建在独立 kaniko Job 中完成；SA `ci-runner` 绑 scoped ClusterRole
 - `--disableupdate` 已禁用 runner 自动更新（曾导致 job 中断）
 - 镜像用 `dev-<sha>` 唯一 tag；containerd 信任 `192.168.3.49:30500`（HTTP）
 - 若出现 ghost runner（旧 pod 残留的 offline/busy runner），到 GitHub 仓库

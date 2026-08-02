@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 IMG="192.168.3.49:30500/actions-runner:latest"
 
-${KUBECTL} create namespace ci --dry-run=client -o yaml | ${KUBECTL} apply -f -
+${KUBECTL} apply -f "${SCRIPT_DIR}/ci-namespace.yaml"
 ${KUBECTL} apply -f "${SCRIPT_DIR}/runner-sa.yaml"
 
 # Build context: runner/ (Dockerfile + entrypoint.sh) via ConfigMap

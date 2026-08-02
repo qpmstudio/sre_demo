@@ -12,6 +12,7 @@ spec:
       labels: { app: github-runner }
     spec:
       serviceAccountName: ci-runner
+      hostname: github-runner
       containers:
         - name: runner
           image: 192.168.3.49:30500/actions-runner:latest
@@ -29,6 +30,9 @@ spec:
             - name: NO_PROXY
               value: 192.168.3.49,localhost,127.0.0.1,.svc,.cluster.local
           resources:
+            requests:
+              cpu: "500m"
+              memory: 512Mi
             limits:
               memory: 2Gi
               cpu: "2"
