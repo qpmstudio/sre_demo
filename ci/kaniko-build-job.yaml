@@ -1,6 +1,10 @@
 # kaniko build Job for the demo app. The workflow sed-replaces ${TAG} in the
 # --destination and applies this manifest. Build context comes from the
 # `demo-context` ConfigMap (created by the workflow from the checked-out demo/).
+#
+# An initContainer dereferences the ConfigMap's symlinked keys into real files
+# (kaniko's COPY preserves symlinks -> dangling symlinks in the image, and
+# `COPY go.mod` would silently fail), then kaniko builds from /ctx.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -11,11 +15,24 @@ spec:
   template:
     spec:
       restartPolicy: Never
+      initContainers:
+        - name: prepare-context
+          image: busybox:1.36
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /ctx
+              cp -aL /workspace/. /ctx/
+          volumeMounts:
+            - name: context
+              mountPath: /workspace
+            - name: ctx
+              mountPath: /ctx
       containers:
         - name: kaniko
           image: gcr.io/kaniko-project/executor:v1.24.0
           args:
-            - --context=/workspace
+            - --context=/ctx
             - --destination=192.168.3.49:30500/demo-app:${TAG}
             - --insecure
           env:
@@ -27,8 +44,10 @@ spec:
               value: 192.168.3.49,localhost,127.0.0.1,.svc,.cluster.local
           volumeMounts:
             - name: ctx
-              mountPath: /workspace
+              mountPath: /ctx
       volumes:
-        - name: ctx
+        - name: context
           configMap:
             name: demo-context
+        - name: ctx
+          emptyDir: {}
