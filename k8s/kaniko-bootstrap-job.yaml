@@ -1,0 +1,31 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: build-runner-image
+  namespace: ci
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: kaniko
+          image: ghcr.io/kaniko-project/executor:v1.24.0
+          args:
+            - --context=/workspace
+            - --destination=192.168.3.49:30500/actions-runner:latest
+            - --insecure
+          env:
+            - name: HTTP_PROXY
+              value: http://192.168.3.155:7890
+            - name: HTTPS_PROXY
+              value: http://192.168.3.155:7890
+            - name: NO_PROXY
+              value: 192.168.3.49,localhost,127.0.0.1,.svc,.cluster.local
+          volumeMounts:
+            - name: context
+              mountPath: /workspace
+      volumes:
+        - name: context
+          configMap:
+            name: runner-build-context
