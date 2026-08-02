@@ -12,7 +12,11 @@ ts() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 export RUNNER_ALLOW_RUNASROOT=1
 
 API_BASE="https://api.github.com/repos/${GITHUB_REPO}/actions/runners"
-RUNNER_NAME="local-$(hostname)-$$"
+# Stable name so a pod restart re-registers the same runner. The previous
+# -$$ suffix produced a fresh name every start, which (combined with
+# --unattended) caused a "A runner exists with the same name" crash-loop once
+# the previous registration was left stale by an unclean shutdown.
+RUNNER_NAME="local-$(hostname)"
 
 # ── in-cluster kubeconfig from the mounted ServiceAccount token ──
 ts "=== Generating in-cluster kubeconfig ==="
@@ -43,6 +47,24 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Idempotent re-registration: drop any existing runner with our stable name
+# before registering. Otherwise a stale registration left by an unclean
+# shutdown makes config.sh --unattended fail with "A runner exists with the
+# same name" and, via set -e, crash-loops the pod.
+ts "=== Removing stale runner registrations for '${RUNNER_NAME}' ==="
+EXISTING=$(curl -s --tls-max 1.2 \
+  -H "Authorization: token ${GITHUB_PAT}" \
+  -H "Accept: application/vnd.github+json" \
+  "${API_BASE}" | jq -r --arg name "$RUNNER_NAME" \
+    '.runners[]? | select(.name == $name) | .id' || true)
+for id in $EXISTING; do
+  ts "Removing stale runner id=${id}"
+  curl -s --tls-max 1.2 -X DELETE \
+    -H "Authorization: token ${GITHUB_PAT}" \
+    -H "Accept: application/vnd.github+json" \
+    "${API_BASE}/${id}" >/dev/null || true
+done
+
 ts "=== Registering runner ==="
 REG_TOKEN=$(curl -s --tls-max 1.2 -X POST \
   -H "Authorization: token ${GITHUB_PAT}" \
@@ -53,8 +75,14 @@ if [ -z "$REG_TOKEN" ] || [ "$REG_TOKEN" = "null" ]; then
   exit 1
 fi
 
+# --disableupdate: the runner previously auto-updated (2.323.0 -> 2.336.0)
+# DURING a workflow job, killing the in-flight Deploy step. Disabling the
+# self-update keeps the running version stable across the job lifetime.
 ./config.sh --url "https://github.com/${GITHUB_REPO}" \
-  --token "$REG_TOKEN" --unattended --name "$RUNNER_NAME"
+  --token "$REG_TOKEN" --unattended --name "$RUNNER_NAME" --disableupdate
 
 ts "=== Runner online. Waiting for jobs ==="
-./run.sh
+# exec so run.sh (and its Runner.Listener) becomes PID 1: SIGTERM from
+# kubelet reaches the listener directly for a graceful shutdown, instead of
+# being absorbed by this wrapper bash waiting on a foreground child.
+exec ./run.sh
