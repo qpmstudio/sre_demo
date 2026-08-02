@@ -24,7 +24,7 @@ RUN curl -fsSL -o /tmp/actions-runner.tar.gz \
     && rm /tmp/actions-runner.tar.gz
 
 # kaniko executor (no-Docker image build inside runner pods)
-COPY --from=ghcr.io/kaniko-project/executor:v1.24.0 /kaniko/executor /kaniko/executor
+COPY --from=gcr.io/kaniko-project/executor:v1.24.0 /kaniko/executor /kaniko/executor
 
 COPY entrypoint.sh /home/runner/entrypoint.sh
 RUN chmod +x /home/runner/entrypoint.sh /kaniko/executor
